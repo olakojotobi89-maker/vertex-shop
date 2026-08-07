@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Log in — Vertex Shop</title>
+<meta name="description" content="Log in to your Vertex Shop account to order meals, pastries and drinks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+</head>
+<body>
+
+<main class="auth-page">
+  <div class="auth-sheet-wrap">
+
+    <!-- ============ Header ============ -->
+    <section class="auth-top">
+      <div class="container">
+        <a href="index.html" class="auth-logo" aria-label="Vertex Shop home">
+          <img src="image/logo.png" alt="Vertex Shop" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <span class="auth-logo-fallback" style="display:none;">VS</span>
+          <span class="auth-logo-word">Vertex Shop</span>
+        </a>
+        <h1>Welcome back</h1>
+        <p>Log in to pick up where you left off and reorder your favorites.</p>
+      </div>
+    </section>
+
+    <div class="plate-rim" aria-hidden="true" style="margin-top:-20px; position:relative; z-index:1;"></div>
+
+    <!-- ============ Login form ============ -->
+    <section class="auth-sheet" style="margin-top:-1px; border-radius:0 0 28px 28px;">
+      <div class="container">
+
+        <form id="login-form" novalidate>
+
+          <div class="form-field">
+            <label for="identifier">Email or phone number</label>
+            <input
+              type="text"
+              id="identifier"
+              name="identifier"
+              autocomplete="username"
+              placeholder="you@example.com or 080 000 0000"
+              required>
+          </div>
+
+          <div class="form-field" style="margin-bottom: var(--space-2);">
+            <label for="password">Password</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              autocomplete="current-password"
+              placeholder="Enter your password"
+              required>
+          </div>
+
+          <a href="#" class="auth-forgot" id="forgot-password-link">Forgot password?</a>
+
+          <div id="login-error" class="form-field-hint" role="alert" style="color:#B3402A; display:none; margin-bottom:12px;"></div>
+
+          <button type="submit" class="btn btn-primary btn-block">Log In</button>
+
+        </form>
+
+        <p class="auth-switch">
+          New to Vertex Shop? <a href="index.html">Create an account</a>
+        </p>
+
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script src="js/auth.js"></script>
+</body>
+</html>
