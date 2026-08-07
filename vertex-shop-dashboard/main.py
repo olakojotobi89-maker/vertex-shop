@@ -6,10 +6,9 @@ Run with:  python main.py
 A Python/CustomTkinter desktop application for managing products, orders,
 customers and categories for the Vertex Shop public web app.
 
-CURRENT DATA LAYER: local SQLite (see database/database.py).
-FUTURE DATA LAYER : Supabase (PostgreSQL + Storage + Realtime). The UI is
-                    decoupled from storage via the database.Repository, so
-                    swapping to Supabase does not require redesigning the UI.
+DATA LAYER: Supabase (PostgreSQL + Storage + Realtime) is the ONLY backend.
+            The dashboard authenticates an administrator via Supabase Auth
+            and requires the account to carry the app_role=admin claim.
 """
 import os
 import sys
@@ -20,8 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import customtkinter as ctk
 
 import config.settings as settings
+import database.supabase_client as supabase_auth
 from views.widgets import Toast, font, make_button
 from views.notifications import NotificationCenter, NotificationPanel
+from views.login import AdminLoginView
 
 
 class VertexShopApp(ctk.CTk):
@@ -36,26 +37,39 @@ class VertexShopApp(ctk.CTk):
         self.geometry("1280x780")
         self.minsize(1024, 680)
 
-        # Notification center (simulates new orders)
-        self.notifications = NotificationCenter(self)
-        self.notifications.on_new_order = self._on_new_order_notification
-
         # Views registry
         self.views = {}
         self.current_view = None
+        self.logged_in = False
 
-        # Build layout
-        self._build_sidebar()
-        self._build_content_area()
+        # Notification center (Supabase Realtime driven)
+        self.notifications = NotificationCenter(self)
+        self.notifications.on_new_order = self._on_new_order_notification
 
-        # Show dashboard by default
-        self.show_view("dashboard")
-
-        # Start simulated notifications
-        self.notifications.start()
+        # Show the admin login gate first.
+        self._build_login_gate()
 
         # Bind close
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    # ------------------------------------------------------------------
+    # Auth gate
+    # ------------------------------------------------------------------
+    def _build_login_gate(self):
+        self.login_view = AdminLoginView(self, self)
+        self.login_view.pack(fill="both", expand=True)
+
+    def on_admin_logged_in(self):
+        """Called after a successful admin sign-in."""
+        self.logged_in = True
+        self.login_view.destroy()
+        self._build_layout()
+        self.notifications.start()
+        self.show_view("dashboard")
+
+    def _build_layout(self):
+        self._build_sidebar()
+        self._build_content_area()
 
     # ------------------------------------------------------------------
     # Layout
@@ -252,6 +266,8 @@ class VertexShopApp(ctk.CTk):
         from views.widgets import confirm_dialog
         if confirm_dialog(self, "Log out of the admin dashboard?",
                           title="Logout", confirm_text="Logout", accent=settings.COLORS["danger"]):
+            supabase_auth.sign_out_admin()
+            self.notifications.stop()
             self.destroy()
 
     def _on_close(self):
@@ -266,3 +282,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+</content>

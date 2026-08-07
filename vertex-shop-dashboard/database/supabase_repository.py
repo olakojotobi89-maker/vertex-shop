@@ -1,12 +1,14 @@
 """
 Supabase-backed repository.
 
-Implements the SAME public interface as database.Database (SQLite) so that
-the views can use either seamlessly. The active data layer is selected in
-database/database.py based on whether Supabase credentials are configured.
+Implements the data-layer interface used by the views. Reads use the anon
+(publishable) key. Writes (products, categories) require the admin session
+to be active so that RLS (app_role=admin) permits them. If a write is
+attempted without an admin session, an error is raised (never silently
+swallowed).
 
-Table / column names used here match the Supabase schema (`supabase_migration.sql`):
-    - categories : id(uuid), name, description, created_at
+Table / column mapping (see supabase_migration.sql):
+    - categories : id(uuid), name, created_at
     - products   : id(uuid), name, description, price, image_url, available,
                    category_id(fk->categories.id), created_at
     - orders     : id(uuid), order_number, customer_id, customer_name,
@@ -15,31 +17,39 @@ Table / column names used here match the Supabase schema (`supabase_migration.sq
                    delivery_fee, total_amount, status, created_at
     - order_items: id, order_id(fk), product_id, quantity, product_name,
                    unit_price, subtotal
-
-NOTE: The desktop admin app uses the anon (publishable) key. Writes against
-products/categories/orders are only permitted once RLS admin policies from
-the SQL migration are applied AND the client is signed in as an admin user
-(having an `app_role` of `admin` in its JWT).
+    - customers  : id(uuid), auth_user_id, full_name, phone, email
 """
-from datetime import datetime
+from datetime import date, datetime
 
 from models.product import Product
 from models.order import Order, OrderItem
 from models.customer import Customer
 
-from .supabase_client import get_supabase_client
+from .supabase_client import (
+    get_supabase_client,
+    is_admin_authenticated,
+    get_admin_session,
+    get_admin_user,
+)
 
 
 class SupabaseDatabase:
     """Supabase-backed implementation of the data-layer interface."""
 
-    def __init__(self):
-        self.client = get_supabase_client()
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
         self.available = self.client is not None
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _require_admin(self):
+        if not is_admin_authenticated():
+            raise RuntimeError(
+                "Administrator access required. Please sign in with an admin "
+                "account on the Settings page."
+            )
+
     def _resolve_category_id(self, category_name: str):
         """Resolve a category name to its id in Supabase."""
         if not category_name:
@@ -50,7 +60,7 @@ class SupabaseDatabase:
             if rows:
                 return rows[0]["id"]
         except Exception:
-            pass
+            return None
         return None
 
     # ------------------------------------------------------------------
@@ -64,6 +74,7 @@ class SupabaseDatabase:
         return [c["name"] for c in self.get_categories()]
 
     def add_category(self, name: str) -> dict:
+        self._require_admin()
         resp = self.client.table("categories").insert({
             "name": name.strip(),
             "created_at": datetime.now().isoformat(),
@@ -71,9 +82,11 @@ class SupabaseDatabase:
         return resp.data[0] if resp.data else {}
 
     def update_category(self, cat_id, name: str):
+        self._require_admin()
         self.client.table("categories").update({"name": name.strip()}).eq("id", cat_id).execute()
 
     def delete_category(self, cat_id):
+        self._require_admin()
         self.client.table("categories").delete().eq("id", cat_id).execute()
 
     # ------------------------------------------------------------------
@@ -92,10 +105,7 @@ class SupabaseDatabase:
         query = query.order("created_at", desc=True)
         resp = query.execute()
         rows = resp.data or []
-        products = []
-        for r in rows:
-            products.append(self._product_from_sb(r))
-        return products
+        return [self._product_from_sb(r) for r in rows]
 
     def get_product(self, product_id):
         resp = self.client.table("products").select(
@@ -107,6 +117,7 @@ class SupabaseDatabase:
         return self._product_from_sb(rows[0])
 
     def add_product(self, name, description="", category="", price=0.0, image="", available=True) -> Product:
+        self._require_admin()
         cat_id = self._resolve_category_id(category)
         payload = {
             "name": name.strip(),
@@ -126,6 +137,7 @@ class SupabaseDatabase:
 
     def update_product(self, product_id, name, description="", category="", price=0.0,
                        image=None, available=True):
+        self._require_admin()
         cat_id = self._resolve_category_id(category)
         payload = {
             "name": name.strip(),
@@ -140,6 +152,7 @@ class SupabaseDatabase:
         self.client.table("products").update(payload).eq("id", product_id).execute()
 
     def delete_product(self, product_id):
+        self._require_admin()
         self.client.table("products").delete().eq("id", product_id).execute()
 
     def product_count(self) -> int:
@@ -208,7 +221,6 @@ class SupabaseDatabase:
             raise RuntimeError("Could not insert order into Supabase.")
         row = resp.data[0]
 
-        # Insert order items
         items_payload = []
         for it in order.items:
             items_payload.append({
@@ -225,6 +237,7 @@ class SupabaseDatabase:
         return self.get_order(row["id"])
 
     def update_order_status(self, order_id, status: str):
+        self._require_admin()
         self.client.table("orders").update({"status": status}).eq("id", order_id).execute()
 
     def order_count(self) -> int:
@@ -236,13 +249,11 @@ class SupabaseDatabase:
         return len(resp.data or [])
 
     def orders_today(self) -> int:
-        from datetime import date
         today = date.today().isoformat()
         resp = self.client.table("orders").select("id").gte("created_at", today).execute()
         return len(resp.data or [])
 
     def sales_today(self) -> float:
-        from datetime import date
         today = date.today().isoformat()
         resp = self.client.table("orders").select("total_amount").gte("created_at", today).neq("status", "Cancelled").execute()
         rows = resp.data or []
@@ -261,15 +272,12 @@ class SupabaseDatabase:
     # Customers
     # ------------------------------------------------------------------
     def get_customers(self) -> list:
-        # Aggregate customers from the customers table (profiles). Do a simple
-        # read; the Python dashboard treats each profile as a customer.
         resp = self.client.table("customers").select(
             "id, full_name, phone, email, auth_user_id, created_at"
         ).order("created_at", desc=True).execute()
         rows = resp.data or []
         customers = []
         for r in rows:
-            # Count orders / spend by customer_id if available.
             order_count, total_spent, last_order = self._customer_order_stats(r.get("id"))
             customers.append(Customer(
                 name=r.get("full_name", ""),
@@ -279,7 +287,6 @@ class SupabaseDatabase:
                 total_spent=total_spent,
                 last_order_at=last_order,
             ))
-        # If no customers profiles exist yet, fall back to deriving from orders.
         if not customers:
             customers = self._customers_from_orders()
         return customers
@@ -316,7 +323,6 @@ class SupabaseDatabase:
             if r.get("status") != "Cancelled":
                 grouped[key]["spent"] += float(r.get("total_amount", 0) or 0)
             grouped[key]["last"] = max(grouped[key]["last"], r.get("created_at", ""))
-        # Sort by spend descending
         customers = [Customer(
             name=g["name"], phone=g["phone"], email=g["email"],
             order_count=g["count"], total_spent=g["spent"], last_order_at=g["last"],
@@ -388,3 +394,4 @@ class SupabaseDatabase:
         )
         order.items = items or []
         return order
+</content>

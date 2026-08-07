@@ -43,16 +43,18 @@ APP_VERSION = "1.0.0"
 COMPANY = "Vertex Shop"
 
 # ---------------------------------------------------------------------------
-# Supabase placeholders (NOT used yet - SQLite is active).
+# Supabase configuration (the ONLY backend for the dashboard).
 # ---------------------------------------------------------------------------
-# When integrating Supabase, read these from environment variables:
+# Credentials are read from environment variables / the .env file (loaded in
+# database/supabase_client.py via python-dotenv). Only the PUBLISHABLE/anon
+# key is used here. The service-role key is NEVER used by this app.
 #   SUPABASE_URL
 #   SUPABASE_ANON_KEY
-#   SUPABASE_SERVICE_ROLE_KEY   (never expose this to the public web app)
-# Leave them empty for now.
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+# Supabase Storage bucket used for product images.
+STORAGE_BUCKET = "product-images"
 
 # ---------------------------------------------------------------------------
 # Order status workflow (in order of progress)
@@ -125,7 +127,8 @@ PICKUP_LOCATIONS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Demo/notification settings
+# Realtime settings
 # ---------------------------------------------------------------------------
-SIMULATE_NEW_ORDERS = True      # Simulate incoming orders with a timer
-SIMULATE_ORDER_INTERVAL_SEC = 30  # seconds between simulated notifications
+# New-order notifications are driven by Supabase Realtime on public.orders.
+# No simulated/demo orders are ever generated.
+REALTIME_ORDERS_CHANNEL = "realtime:vertex-orders"
