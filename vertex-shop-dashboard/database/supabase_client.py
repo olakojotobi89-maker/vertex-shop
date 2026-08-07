@@ -14,25 +14,29 @@ SECURITY:
 """
 import os
 
-from dotenv import load_dotenv
-
 import config.settings as settings
 
 # Load .env from the project root (BEFORE settings resolves env vars).
-load_dotenv(settings.BASE_DIR / ".env")
+# python-dotenv is optional; if it is not installed we simply rely on the
+# process environment variables.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(settings.BASE_DIR / ".env")
+except Exception:
+    pass
 
 
 def get_supabase_client():
     """
     Build and return an authenticated Supabase client.
 
-    Returns None if credentials are missing (the app then falls back to
-    the local SQLite layer).
+    Returns None if credentials are missing or the supabase package is not
+    installed (the app then falls back to the local SQLite layer).
     """
     try:
         from supabase import create_client, Client
     except ImportError:
-        print("supabase-py not installed. Run: pip install supabase")
+        print("supabase-py not installed. Run: pip install supabase python-dotenv")
         return None
 
     url = os.environ.get("SUPABASE_URL", settings.SUPABASE_URL)

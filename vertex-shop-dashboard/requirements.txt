@@ -1,3 +1,9 @@
 customtkinter>=6.0.0
 pillow>=10.0.0
 
+# --- Optional Supabase integration (only needed when connecting the dashboard
+#     to Supabase as the shared backend). Install with:
+#         pip install supabase python-dotenv
+supabase>=2.4.0
+python-dotenv>=1.0.0
+

@@ -1,0 +1,22 @@
+# --- Environment & secrets (NEVER commit real secrets) ---
+.env
+*.env
+.env.local
+.env.*.local
+
+# --- Local SQLite data & uploaded images ---
+vertex-shop-dashboard/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+build/
+dist/
+
