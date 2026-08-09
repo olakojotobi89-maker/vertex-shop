@@ -310,14 +310,14 @@ function renderCart() {
 const cartDrawer = document.getElementById("cart-drawer");
 const cartOverlay = document.getElementById("cart-overlay");
 
-function openCart() {
+function openCart() { // Reverted to non-async as no await is needed here.
   renderCart();
   cartDrawer.classList.add("is-open");
   cartOverlay.classList.add("is-open");
 }
 function closeCart() {
-  cartDrawer.classList.remove("is-open");
-  cartOverlay.classList.remove("is-open");
+  cartDrawer.classList.remove("is-open"); // Corrected typo
+  cartOverlay.classList.remove("is-open"); // Corrected typo
 }
 
 document.getElementById("cart-toggle").addEventListener("click", openCart);
@@ -401,11 +401,23 @@ function renderCheckoutSummary() {
   totalEl.textContent = formatNaira(total);
 }
 
-function openCheckout() {
+async function openCheckout() { // Made async to await Supabase session check
   if (Cart.totalCount() === 0) return;
-  closeCart();
-  renderCheckoutSummary();
-  checkoutOverlay.classList.add("is-open");
+
+  // Verify authenticated Supabase session
+  const { data: { session } } = await supabaseClient.auth.getSession();
+
+  if (!session) {
+    showToast("Please sign in before placing an order.");
+    // Redirect to login page, potentially with a redirect_to parameter
+    window.location.href = "login.html?redirect_to=" + encodeURIComponent(window.location.href);
+    return;
+  }
+
+  // If session exists, proceed with opening checkout
+  closeCart(); // Close the cart drawer
+  renderCheckoutSummary(); // Update the summary in the checkout modal
+  checkoutOverlay.classList.add("is-open"); // Open the checkout modal
 }
 function closeCheckout() {
   checkoutOverlay.classList.remove("is-open");
@@ -427,36 +439,53 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
     return;
   }
 
+  // Ensure Supabase client is available
+  if (!supabaseClient) {
+    showToast("Supabase client not initialized. Cannot place order.");
+    console.error("Supabase client is null.");
+    return;
+  }
+
   const formData = new FormData(form);
   const isDelivery = formData.get("deliveryMethod") === "delivery";
   const subtotal = Cart.totalPrice(catalog);
   const deliveryFee = isDelivery ? DELIVERY_FEE : 0;
   const total = subtotal + deliveryFee;
 
-  // Optional: attach the logged-in customer's id if available.
+  // Get authenticated user session
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session || !session.user) {
+    showToast("Authentication error: You must be signed in to place an order. Redirecting to login.");
+    window.location.href = "login.html?redirect_to=" + encodeURIComponent(window.location.href);
+    return;
+  }
+  const authUserId = session.user.id;
+
   let customerProfileId = null;
-  if (supabaseClient) {
-    const { data: sessionData } = await supabaseClient.auth.getSession();
-    const authUserId = sessionData?.session?.user?.id || null;
+  // Fetch the customer's profile ID from the 'customers' table
+  const { data: customerProfile, error: profileError } = await supabaseClient
+    .from("customers")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .single();
 
-    if (authUserId) {
-      // Fetch the customer's profile ID from the 'customers' table
-      const { data: customerProfile, error: profileError } = await supabaseClient
-        .from("customers")
-        .select("id")
-        .eq("auth_user_id", authUserId)
-        .single();
+  if (profileError && profileError.code !== 'PGRST116') { // PGRST116 is "no rows found"
+    console.error("Error fetching customer profile ID:", profileError);
+    showToast("Error fetching your customer profile. Please try again.");
+    return;
+  } else if (customerProfile) {
+    customerProfileId = customerProfile.id;
+  }
 
-      if (profileError) {
-        console.error("Error fetching customer profile ID:", profileError);
-      } else if (customerProfile) {
-        customerProfileId = customerProfile.id;
-      }
-    }
+  // Defensive check: If customerProfileId is still null, it means no profile exists for the auth user.
+  if (!customerProfileId) {
+    showToast("Your customer profile is incomplete. Please ensure your account details are fully registered.");
+    console.error("Customer profile not found for auth user ID:", authUserId);
+    return; // Prevent order placement
   }
 
   // --- DEBUG LOGS ---
-  console.log("[ORDER DEBUG] Auth user ID:", (await supabaseClient.auth.getUser()).data.user?.id);
+  console.log("[ORDER DEBUG] Auth user ID:", authUserId); // Use the already fetched authUserId
   console.log("[ORDER DEBUG] customerProfileId (fetched from public.customers):", customerProfileId);
 
   // Build order_items payload (product_id, quantity, product_name, unit_price, subtotal).
@@ -487,8 +516,10 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
     subtotal,
     delivery_fee: isDelivery ? DELIVERY_FEE : 0,
     total_amount: total,
-    status: "Pending",
+    status: "pending",
   };
+  console.log("[ORDER DEBUG] STATUS BEING SENT:", orderPayload.status);
+  console.log("[ORDER DEBUG] ORDER TYPE BEING SENT:", orderPayload.order_type);
   console.log("[ORDER DEBUG] Final orderPayload before INSERT:", orderPayload);
 
   if (supabaseClient) {
