@@ -6,9 +6,9 @@ Errors are propagated (NOT swallowed) so the UI can show the actual reason.
 """
 import uuid
 from pathlib import Path
-
+import httpx # Not directly used for passing, but useful for context if needed
 import config.settings as settings
-from database.supabase_client import get_supabase_client, is_admin_authenticated
+from database.supabase_client import get_supabase_client, is_admin_authenticated # Removed get_supabase_http_client as it's not needed for Storage methods
 
 
 # Allowed image extensions (case-insensitive).
@@ -45,7 +45,7 @@ def upload_product_image(file_path: str) -> str:
     Raises RuntimeError with the ACTUAL error if the upload fails.
     """
     src = validate_image_file(file_path)
-
+    
     if not is_admin_authenticated():
         raise RuntimeError(
             "You must be signed in as an administrator to upload product images."
@@ -65,16 +65,21 @@ def upload_product_image(file_path: str) -> str:
 
     # Upload to Supabase Storage. Do NOT swallow errors.
     try:
-        client.storage.from_(bucket).upload(object_name, data)
+        # The supabase-py client needs the content-type to be set for the
+        # file to be viewable in the browser instead of being downloaded.
+        import mimetypes
+        content_type, _ = mimetypes.guess_type(str(src)) # Convert Path to string for mimetypes.
+        file_options = {"content-type": content_type or "application/octet-stream"}
+        client.storage.from_(bucket).upload(object_name, data, file_options=file_options)
     except Exception as exc:
         detail = getattr(exc, "message", None) or str(exc)
         raise RuntimeError(f"Product image upload failed: {detail}") from exc
 
     # Build the public URL.
     try:
-        res = client.storage.from_(bucket).get_public_url(object_name)
-        if res:
-            return res
+        public_url = client.storage.from_(bucket).get_public_url(object_name)
+        if public_url:
+            return public_url
     except Exception as exc:
         # Fall back to constructing the standard public URL manually.
         base = settings.SUPABASE_URL.rstrip("/")
@@ -101,7 +106,7 @@ def delete_product_image(object_name: str):
     except Exception as exc:
         detail = getattr(exc, "message", None) or str(exc)
         raise RuntimeError(f"Product image delete failed: {detail}") from exc
-
+    
 
 def extract_object_name(public_url: str) -> str:
     """Extract the storage object name from a public URL (if it is one)."""

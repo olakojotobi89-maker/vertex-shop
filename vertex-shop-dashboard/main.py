@@ -12,6 +12,7 @@ DATA LAYER: Supabase (PostgreSQL + Storage + Realtime) is the ONLY backend.
 """
 import os
 import sys
+import threading
 
 # Allow running from the project root regardless of cwd.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -159,6 +160,7 @@ class VertexShopApp(ctk.CTk):
             from views.orders import OrdersView
             from views.customers import CustomersView
             from views.categories import CategoriesView
+            from views.add_product import AddProductView # Import AddProductView
             from views.settings import SettingsView
 
             factories = {
@@ -167,6 +169,7 @@ class VertexShopApp(ctk.CTk):
                 "orders": OrdersView,
                 "customers": CustomersView,
                 "categories": CategoriesView,
+                "add_product": AddProductView, # Add to factories
                 "settings": SettingsView,
             }
             cls = factories[name]
@@ -189,42 +192,32 @@ class VertexShopApp(ctk.CTk):
             else:
                 btn.configure(fg_color="transparent", text_color=settings.COLORS["text_muted"])
 
-        # Refresh views that need live data
-        if name in ("dashboard", "products", "orders", "customers", "categories"):
-            try:
-                view = self.views[name]
-                if hasattr(view, "refresh"):
-                    view.refresh()
-            except Exception:
-                pass
+        # Refresh views that need live data, but handle 'add_product' specially
+        if name != "add_product": # 'add_product' is configured by open_add_product/open_edit_product
+            if name in ("dashboard", "products", "orders", "customers", "categories"):
+                try:
+                    view = self.views[name]
+                    if hasattr(view, "refresh"):
+                        view.refresh()
+                except Exception:
+                    pass
+
 
     # ------------------------------------------------------------------
     # Product actions
     # ------------------------------------------------------------------
     def open_add_product(self):
-        from views.add_product import AddProductView
-        self._open_form_view(AddProductView, product=None)
+        self.show_view("add_product")
+        # Configure the existing AddProductView instance for adding
+        self.views["add_product"].configure_for_add()
 
     def open_edit_product(self, product_id):
-        from database.database import db
-        from views.add_product import AddProductView
+        from database.database import db # Keep import here as it's only used for this specific action
         product = db.get_product(product_id)
         if product:
-            self._open_form_view(AddProductView, product=product)
-
-    def _open_form_view(self, view_cls, product):
-        # Remove any existing add_product view
-        if "add_product" in self.views:
-            self.views["add_product"].destroy()
-            del self.views["add_product"]
-        if self.current_view and self.current_view in self.views:
-            self.views[self.current_view].grid_forget()
-
-        view = view_cls(self.content, self, product=product)
-        view.grid(row=0, column=0, sticky="nsew")
-        self.views["add_product"] = view
-        self.current_view = "add_product"
-        view.tkraise()
+            self.show_view("add_product")
+            # Configure the existing AddProductView instance for editing
+            self.views["add_product"].configure_for_edit(product)
 
     # ------------------------------------------------------------------
     # Order detail
@@ -251,10 +244,24 @@ class VertexShopApp(ctk.CTk):
         self.after(0, lambda: self._show_new_order_toast(order))
 
     def _show_new_order_toast(self, order):
+        # Play sound in a separate thread to avoid blocking the UI
+        sound_thread = threading.Thread(target=self._play_notification_sound, daemon=True)
+        sound_thread.start()
+
         self.toast.show(f"🔔 NEW ORDER {order.order_no} · {order.customer_name} · {order.total_naira}",
                         duration=5000, color=settings.COLORS["accent"])
         # Refresh dashboard/orders if visible
         self._refresh_current()
+
+    def _play_notification_sound(self):
+        try:
+            from playsound import playsound
+            sound_path = settings.BASE_DIR / "assets" / "sounds" / "new_order.wav"
+            if sound_path.exists():
+                playsound(str(sound_path))
+        except Exception as exc:
+            # Silently fail if sound cannot be played
+            print(f"Could not play notification sound: {exc}")
 
     # ------------------------------------------------------------------
     # Misc
@@ -282,4 +289,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-</content>

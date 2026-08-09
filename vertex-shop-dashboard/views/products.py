@@ -37,16 +37,14 @@ class ProductsView(ctk.CTkFrame):
         self.search = SearchBar(filters, placeholder="Search products...",
                                 command=self._on_search, width=320)
         self.search.grid(row=0, column=0, sticky="w")
-
-        self.category_filter = ctk.StringVar(value="All")
-        cats = ["All"] + db.get_category_names()
-        cat_menu = ctk.CTkOptionMenu(
-            filters, variable=self.category_filter, values=cats,
+        
+        self.category_filter_var = ctk.StringVar(value="All")
+        self.category_filter_menu = ctk.CTkOptionMenu(filters, variable=self.category_filter_var, values=["All"],
             command=lambda _: self.refresh(), font=font(13), dropdown_font=font(13),
             fg_color=settings.COLORS["card_bg"], button_color=settings.COLORS["card_border"],
-            button_hover_color=settings.COLORS["card_border"],
-            text_color=settings.COLORS["text"], width=160, height=36)
-        cat_menu.grid(row=0, column=1, padx=(8, 0), sticky="e")
+            button_hover_color=settings.COLORS["card_border"], text_color=settings.COLORS["text"],
+            width=160, height=36)
+        self.category_filter_menu.grid(row=0, column=1, padx=(8, 0), sticky="e")
 
         # Table container (scrollable)
         self.table = ctk.CTkScrollableFrame(self, fg_color=settings.COLORS["card_bg"],
@@ -58,9 +56,13 @@ class ProductsView(ctk.CTkFrame):
         self.refresh()
 
     def _on_search(self, text):
+        # No need to refresh categories on search, only filter products
         self.refresh()
 
     def refresh(self):
+        # Update category filter options
+        categories = ["All"] + db.get_category_names()
+        self.category_filter_menu.configure(values=categories)
         # Clear table
         for child in self.table.winfo_children():
             child.destroy()
@@ -68,7 +70,7 @@ class ProductsView(ctk.CTkFrame):
         search_text = self.search.get().strip()
         category = self.category_filter.get()
         products = db.get_products(search=search_text, category=category)
-
+        
         self.search.set_result(f"{len(products)} product{'s' if len(products) != 1 else ''}")
 
         if not products:
@@ -95,9 +97,8 @@ class ProductsView(ctk.CTkFrame):
             row.pack(fill="x", pady=3)
             row.pack_propagate(False)
 
-            # Image
-            img_path = helpers.resolve_image_path(p.image)
-            img = helpers.load_image_pil(img_path, (44, 44)) or helpers.load_placeholder_icon((44, 44))
+            # Image (local path or Supabase Storage URL)
+            img = helpers.load_product_image(p.image, (44, 44)) or helpers.load_placeholder_icon((44, 44))
             from customtkinter import CTkImage
             img_lbl = ctk.CTkLabel(row, text="", image=CTkImage(light_image=img, dark_image=img),
                                    fg_color=settings.COLORS["card_border"], corner_radius=6,
@@ -131,7 +132,6 @@ class ProductsView(ctk.CTkFrame):
         self.app.open_edit_product(product_id)
 
     def _delete(self, product_id):
-        from models.product import Product
         product = db.get_product(product_id)
         if not product:
             return

@@ -29,4 +29,3 @@ def _build_active_database():
 
 # Singleton instance used across the app.
 db = _build_active_database()
-</content>

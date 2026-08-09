@@ -1,4 +1,4 @@
-"""
+﻿"""
 Supabase-backed repository.
 
 Implements the data-layer interface used by the views. Reads use the anon
@@ -394,4 +394,3 @@ class SupabaseDatabase:
         )
         order.items = items or []
         return order
-</content>

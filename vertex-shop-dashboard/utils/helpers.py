@@ -76,8 +76,8 @@ def load_placeholder_icon(size=(80, 80)):
 def copy_image_to_upload(src_path: str) -> str:
     """
     Copy a chosen image into the local uploads folder and return the
-    stored relative filename. When Supabase Storage is integrated, this
-    becomes an upload to a bucket and returns the public URL.
+    stored relative filename. Retained only for backwards-compatibility;
+    the dashboard now uploads images to Supabase Storage.
     """
     import shutil
     import uuid
@@ -102,6 +102,40 @@ def copy_image_to_upload(src_path: str) -> str:
 
     # Store the path relative to the uploads dir so it survives moves.
     return str(dest)
+
+
+def load_image_from_url(url, size=(80, 80)):
+    """Load an image from a URL into a PIL.Image resized to `size`.
+
+    Returns None if the URL cannot be fetched or decoded.
+    """
+    if not url:
+        return None
+    if not (url.startswith("http://") or url.startswith("https://")):
+        return None
+    try:
+        import io
+        import urllib.request
+        from PIL import Image
+
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = resp.read()
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        img.thumbnail(size)
+        return img
+    except Exception:
+        return None
+
+
+def load_product_image(stored, size=(80, 80)):
+    """Load a product image that may be a local path or a Supabase URL."""
+    if not stored:
+        return None
+    img = load_image_pil(stored, size)
+    if img is not None:
+        return img
+    return load_image_from_url(stored, size)
 
 
 def resolve_image_path(stored: str):

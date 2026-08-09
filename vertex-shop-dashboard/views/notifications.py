@@ -1,10 +1,11 @@
 """
-Notification panel.
+Notification Center and Panel.
 
-Simulates incoming new-order notifications. When Supabase is connected,
-this will be driven by Supabase Realtime instead of the local simulator.
+The NotificationCenter connects to Supabase Realtime (using an async client
+in a separate thread) to listen for new orders and triggers a callback.
+The NotificationPanel is a UI component
+that displays a list of recent notifications.
 """
-import threading
 import time
 from datetime import datetime
 
@@ -12,81 +13,93 @@ import customtkinter as ctk
 
 import config.settings as settings
 from database.database import db
-from models.order import Order, OrderItem
-from utils import helpers
+from database.supabase_client import get_supabase_client, get_supabase_async_client
 from views.widgets import font, make_button
 
 
-# Demo names/items used to simulate incoming orders.
-DEMO_FIRST = ["John", "Mary", "David", "Aisha", "Chinedu", "Fatima", "Grace", "Ibrahim", "Ngozi", "Tunde"]
-DEMO_LAST = ["Doe", "James", "Smith", "Bello", "Okafor", "Sani", "Adeyemi", "Musa", "Okon", "Balogun"]
-DEMO_ITEMS = [
-    ("Jollof Rice", 3500), ("Chicken & Chips", 4800), ("Meat Pie", 1200),
-    ("Shawarma", 3200), ("Chocolate Cake", 6500), ("Puff Puff", 1000),
-    ("Fresh Juice", 1800), ("Egg Roll", 900), ("Vanilla Cupcake", 1500), ("Samosa", 800),
-]
-
-
 class NotificationCenter:
-    """Manages simulated new-order notifications and a callback on new order."""
-
+    """Listens to Supabase Realtime for new orders."""
     def __init__(self, app):
         self.app = app
         self.on_new_order = None    # callable(order) -> None
-        self._stop = threading.Event()
+        self.subscription = None
+        self._realtime_thread = None # Thread for async event loop
+        self._realtime_loop = None   # Event loop for async operations
 
     def start(self):
-        if not settings.SIMULATE_NEW_ORDERS:
+        """Subscribe to new order inserts on the 'orders' table."""
+        # Get the async client for Realtime
+        try:
+            async_client = get_supabase_async_client()
+        except RuntimeError as e:
+            print(f"Realtime disabled: Failed to get async Supabase client: {e}")
             return
-        t = threading.Thread(target=self._loop, daemon=True)
-        t.start()
+
+        def on_new_order_callback(payload):
+            try:
+                order_id = payload.get("new", {}).get("id")
+                if not order_id:
+                    return
+                # Fetch the full order details from the database
+                # This uses the synchronous db client, which is safe from the async thread.
+                order = db.get_order(order_id) 
+                if order and self.on_new_order:
+                    # GUI update must be on the main thread
+                    self.app.after(0, lambda: self.on_new_order(order))
+            except Exception as e:
+                print(f"Error processing realtime order notification: {e}")
+                import traceback; traceback.print_exc()
+
+        # Start a new thread for the async event loop
+        self._realtime_thread = threading.Thread(target=self._run_realtime_loop, args=(async_client, on_new_order_callback), daemon=True)
+        self._realtime_thread.start()
+        print("Realtime thread started.")
+
+    async def _subscribe_to_realtime(self, async_client, on_new_order_callback):
+        """Actual async subscription logic."""
+        try:
+            self.subscription = (
+                async_client.realtime.channel("public:orders")
+                .on("postgres_changes", {"event": "INSERT", "schema": "public", "table": "orders"}, on_new_order_callback)
+                .subscribe()
+            )
+            print("Subscribed to Supabase Realtime for new orders.")
+            # Keep the event loop running to process Realtime messages
+            while True:
+                await asyncio.sleep(1) # Keep the task alive
+        except Exception as e:
+            print(f"Failed to subscribe to Supabase Realtime: {e}")
+            import traceback; traceback.print_exc()
+
+    def _run_realtime_loop(self, async_client, on_new_order_callback):
+        """Runs the asyncio event loop in a separate thread."""
+        self._realtime_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._realtime_loop)
+        self._realtime_loop.run_until_complete(self._subscribe_to_realtime(async_client, on_new_order_callback))
+        self._realtime_loop.close()
+        print("Realtime event loop closed.")
 
     def stop(self):
-        self._stop.set()
-
-    def _loop(self):
-        # First simulated order after a short delay, then periodically.
-        delay = 8
-        while not self._stop.wait(delay):
+        """Unsubscribe from Realtime and stop the async event loop."""
+        if self.subscription and self._realtime_loop and self._realtime_loop.is_running():
             try:
-                order = self._create_simulated_order()
-                if self.on_new_order:
-                    self.on_new_order(order)
-            except Exception:
-                pass
-            delay = settings.SIMULATE_ORDER_INTERVAL_SEC
-
-    def _create_simulated_order(self) -> Order:
-        import random
-        name = f"{random.choice(DEMO_FIRST)} {random.choice(DEMO_LAST)}"
-        phone = self._random_phone()
-        # 1-3 items
-        chosen = random.sample(DEMO_ITEMS, k=random.randint(1, 3))
-        items = [OrderItem(name=n, price=p, quantity=random.randint(1, 3)) for n, p in chosen]
-        subtotal = sum(it.subtotal for it in items)
-        is_delivery = random.random() < 0.7
-        fee = settings.DELIVERY_FEE if is_delivery else 0
-        order = Order(
-            customer_name=name,
-            customer_phone=phone,
-            delivery_method="delivery" if is_delivery else "pickup",
-            delivery_address=("23 Somewhere Road, City" if is_delivery else ""),
-            delivery_instructions=("Call on arrival" if is_delivery else ""),
-            pickup_location=(settings.PICKUP_LOCATIONS[0] if not is_delivery else ""),
-            items=items,
-            subtotal=subtotal,
-            delivery_fee=fee,
-            total=subtotal + fee,
-            status="Pending",
-            created_at=datetime.now().isoformat(),
-        )
-        return db.add_order(order)
-
-    @staticmethod
-    def _random_phone():
-        import random
-        return "080" + "".join(str(random.randint(0, 9)) for _ in range(8))
-
+                # Unsubscribe needs to be run in the async loop
+                asyncio.run_coroutine_threadsafe(self.subscription.unsubscribe(), self._realtime_loop)
+                print("Unsubscribed from Supabase Realtime.")
+            except Exception as e:
+                print(f"Error unsubscribing from Realtime: {e}")
+                import traceback; traceback.print_exc()
+            self.subscription = None
+        
+        # Stop the event loop if it's running
+        if self._realtime_loop and self._realtime_loop.is_running():
+            self._realtime_loop.call_soon_threadsafe(self._realtime_loop.stop)
+            # Wait for the thread to finish if it's still alive
+            if self._realtime_thread and self._realtime_thread.is_alive():
+                self._realtime_thread.join(timeout=5) # Give it some time to shut down
+            print("Realtime event loop stopped.")
+        self._realtime_loop = None
+        self._realtime_thread = None
 
 class NotificationPanel(ctk.CTkToplevel):
     """A slide-out panel listing recent order notifications."""

@@ -131,15 +131,28 @@ class PageHeader(ctk.CTkFrame):
     def __init__(self, parent, title, subtitle="", action_button=None):
         super().__init__(parent, fg_color="transparent")
         self.grid_columnconfigure(0, weight=1)
-        title_lbl = ctk.CTkLabel(self, text=title, font=font(22, "bold"),
+        self.title_lbl = ctk.CTkLabel(self, text=title, font=font(22, "bold"),
                                  text_color=settings.COLORS["text"], anchor="w")
-        title_lbl.grid(row=0, column=0, sticky="w")
+        self.title_lbl.grid(row=0, column=0, sticky="w")
         if subtitle:
-            sub_lbl = ctk.CTkLabel(self, text=subtitle, font=font(13),
+            self.sub_lbl = ctk.CTkLabel(self, text=subtitle, font=font(13),
                                    text_color=settings.COLORS["text_muted"], anchor="w")
-            sub_lbl.grid(row=1, column=0, sticky="w", pady=(4, 0))
+            self.sub_lbl.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        else:
+            self.sub_lbl = None # Ensure it's initialized even if no subtitle
         if action_button:
             action_button.grid(row=0, column=1, rowspan=2, sticky="e")
+
+    def set_title(self, title):
+        self.title_lbl.configure(text=title)
+
+    def set_subtitle(self, subtitle):
+        if not self.sub_lbl: # Create if it didn't exist before
+            self.sub_lbl = ctk.CTkLabel(self, text=subtitle, font=font(13),
+                                        text_color=settings.COLORS["text_muted"], anchor="w")
+            self.sub_lbl.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        else:
+            self.sub_lbl.configure(text=subtitle)
 
 
 # ===========================================================================
@@ -254,3 +267,54 @@ class Toast(ctk.CTkLabel):
     def _hide(self):
         self.place_forget()
         self._after_id = None
+
+
+# ===========================================================================
+# Naira currency entry
+# ===========================================================================
+class NairaEntry(ctk.CTkFrame):
+    """A formatted currency entry for Nigerian Naira (₦)."""
+
+    def __init__(self, parent, placeholder_text="", **kwargs):
+        super().__init__(parent, fg_color=settings.COLORS["card_border"],
+                         border_width=0, height=40, corner_radius=8, **kwargs)
+
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self.symbol = ctk.CTkLabel(self, text="₦", font=font(15, "semibold"),
+                                   text_color=settings.COLORS["text_muted"])
+        self.symbol.grid(row=0, column=0, padx=(12, 5))
+
+        self.entry = ctk.CTkEntry(
+            self, font=font(14), border_width=0,
+            text_color=settings.COLORS["text"], placeholder_text=placeholder_text,
+            fg_color=settings.COLORS["card_border"]  # Use a visible background
+        )
+        self.entry.grid(row=0, column=1, sticky="ew")
+
+        self.entry.bind("<KeyRelease>", self._on_key_release)
+
+    def _on_key_release(self, event=None):
+        """Format the number with commas as the user types."""
+        current_text = self.entry.get().replace(",", "")
+        if not current_text.isdigit():
+            # Allow backspace/delete to clear the field
+            if not current_text:
+                return
+            # Remove non-digit characters
+            current_text = "".join(filter(str.isdigit, current_text))
+
+        if current_text:
+            formatted_text = f"{int(current_text):,}"
+            if self.entry.get() != formatted_text:
+                cursor_pos = self.entry.index(ctk.INSERT)
+                self.entry.delete(0, ctk.END)
+                self.entry.insert(0, formatted_text)
+                self.entry.icursor(cursor_pos)
+
+    def get_amount(self) -> str:
+        return self.entry.get().replace(",", "")
+
+    def set_amount(self, amount: float):
+        self.entry.insert(0, f"{int(amount):,}")

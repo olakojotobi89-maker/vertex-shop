@@ -434,8 +434,26 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
   const total = subtotal + deliveryFee;
 
   // Optional: attach the logged-in customer's id if available.
-  const { data: sessionData } = supabaseClient ? await supabaseClient.auth.getSession() : { data: { session: null } };
-  const customerId = sessionData?.session?.user?.id || null;
+  let customerProfileId = null;
+  if (supabaseClient) {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const authUserId = sessionData?.session?.user?.id || null;
+
+    if (authUserId) {
+      // Fetch the customer's profile ID from the 'customers' table
+      const { data: customerProfile, error: profileError } = await supabaseClient
+        .from("customers")
+        .select("id")
+        .eq("auth_user_id", authUserId)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching customer profile ID:", profileError);
+      } else if (customerProfile) {
+        customerProfileId = customerProfile.id;
+      }
+    }
+  }
 
   // Build order_items payload (product_id, quantity, product_name, unit_price, subtotal).
   const items = Object.entries(Cart.items).map(([id, qty]) => {
@@ -449,12 +467,17 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
     };
   });
 
+// Unique human-friendly order reference (also stored in public.orders so the
+  // Python dashboard can display it).
+  let orderRef = "VS-" + Date.now().toString().slice(-8);
+
   const orderPayload = {
+    order_number: orderRef,
     customer_id: customerId,
     customer_name: formData.get("customerName"),
     customer_phone: formData.get("customerPhone"),
     order_type: isDelivery ? "delivery" : "pickup",
-    delivery_address: isDelivery ? (formData.get("deliveryAddress") || null) : null,
+    delivery_address: isDelivery ? (formData.get("deliveryAddress") || null) : null, // Keep this line as is
     delivery_instructions: isDelivery ? (formData.get("deliveryInstructions") || null) : null,
     pickup_location: isDelivery ? null : (formData.get("pickupLocation") || null),
     subtotal,
@@ -462,9 +485,7 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
     total_amount: total,
     status: "Pending",
   };
-
-  let orderRef = "VS-" + Date.now().toString().slice(-8);
-
+  orderPayload.customer_id = customerProfileId; // Assign the fetched customerProfileId
   if (supabaseClient) {
     try {
       // Insert the order header first.
