@@ -50,39 +50,27 @@ const VertexAuth = (() => {
       throw new Error("Supabase client is not available. Check your config.");
     }
 
-    // 1. Create the auth account. No password is ever stored by us.
+    // 1. Create the auth account. The user's full_name and phone are stored
+    // in the raw_user_meta_data field. A server-side trigger should then
+    // copy this into the public.customers table. This avoids RLS issues
+    // that occur when trying to INSERT into customers before the user's
+    // email is confirmed and they have a session.
     const { data, error } = await supabaseClient.auth.signUp({
       email: email.trim(),
       password,
       options: {
+        // This data is stored in auth.users.raw_user_meta_data
         data: { full_name: fullName.trim(), phone: phone.trim() },
       },
     });
 
     if (error) {
+      console.error("Supabase signUp error:", error);
       throw new Error(error.message || "Unable to create account.");
     }
 
     if (!data.user) {
       throw new Error("Account creation returned no user. Check confirmation settings.");
-    }
-
-    // 2. Create the customer profile linked to the auth user.
-    // The customers table must have auth_user_id referencing auth.users(id).
-    const { error: profileError } = await supabaseClient
-      .from("customers")
-      .insert({
-        auth_user_id: data.user.id,
-        full_name: fullName.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-      });
-
-    if (profileError) {
-      // If the profile insert fails (e.g. RLS not configured), surface it.
-      const err = new Error("Account created, but profile could not be saved: " + profileError.message);
-      err.profileError = profileError;
-      throw err;
     }
 
     // 3. Persist a local session reference.
@@ -254,4 +242,3 @@ if (logoutBtn) {
     window.location.href = "login.html";
   });
 }
-

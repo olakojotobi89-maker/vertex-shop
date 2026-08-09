@@ -1,4 +1,4 @@
-﻿"""
+"""
 Supabase-backed repository.
 
 Implements the data-layer interface used by the views. Reads use the anon
@@ -179,35 +179,25 @@ class SupabaseDatabase:
         resp = self.client.table("order_items").select(
             "id, product_id, quantity, product_name, unit_price, subtotal"
         ).eq("order_id", order_id).execute()
-        print(f"[SUPABASE REPO] _items_for_order() Supabase response - data: {resp.data}, error: {resp.error}")
-        return [
-            OrderItem(
-                product_id=it.get("product_id") or 0,
-                name=it.get("product_name", ""),
-                price=float(it.get("unit_price", 0) or 0),
-                quantity=int(it.get("quantity", 1)),
-                subtotal=float(it.get("subtotal", 0) or 0), # Ensure subtotal is mapped
-            )
-            for it in (resp.data or [])
-        ]
+        print(f"[SUPABASE REPO] _items_for_order() Supabase response count: {len(resp.data or [])}")
+        return self._items_for_order_from_map(resp.data or [])
 
     def get_orders(self, search: str = "", status: str = "") -> list:
         print("\n[SUPABASE REPO] get_orders() - START")
         print(f"[SUPABASE REPO] get_orders() called with search='{search}', status='{status}'")
         self._require_admin()
-        print(f"[SUPABASE REPO] Admin authentication for get_orders: SUCCESS")
+        print("[SUPABASE REPO] Admin authentication for get_orders: SUCCESS")
 
         query = self.client.table("orders").select("*")
-        if search: # Search by order_number, customer_name, customer_phone
+        if search:  # Search by order_number, customer_name, customer_phone
             query = query.or_(
                 f"order_number.ilike.%{search}%,customer_name.ilike.%{search}%,customer_phone.ilike.%{search}%"
             )
         if status and status != "All":
             query = query.eq("status", status)
         query = query.order("created_at", desc=True)
-        print(f"[SUPABASE REPO] Executing query: {query.url} with params {query.params}")
         resp = query.execute()
-        print(f"[SUPABASE REPO] ORDER QUERY RESULT: data: {resp.data}, error: {resp.error}")
+        print(f"[SUPABASE REPO] ORDER QUERY RESULT data count: {len(resp.data or [])}")
         print(f"[SUPABASE REPO] DATA COUNT: {len(resp.data or [])}")
 
         rows = resp.data or []
@@ -228,7 +218,7 @@ class SupabaseDatabase:
         orders = []
         for r in rows:
             items = self._items_for_order_from_map(items_map.get(r["id"], []))
-            print(f"[SUPABASE REPO] Mapped order {r['order_number']} with {len(items)} items (batch fetched).")
+            print(f"[SUPABASE REPO] Mapped order {r.get('order_number')} with {len(items)} items (batch fetched).")
             orders.append(self._order_from_sb(r, items=items))
         return orders
 
@@ -328,17 +318,24 @@ class SupabaseDatabase:
         return orders
 
     def _items_for_order_from_map(self, item_rows: list) -> list:
-        """Helper to map pre-fetched item rows to OrderItem objects."""
-        return [
-            OrderItem(
-                product_id=it.get("product_id") or 0,
-                name=it.get("product_name", ""),
-                price=float(it.get("unit_price", 0) or 0),
-                quantity=int(it.get("quantity", 1)),
-                subtotal=float(it.get("subtotal", 0) or 0),
-            )
-            for it in item_rows
-        ]
+        """Helper to map pre-fetched item rows to OrderItem objects.
+
+        `OrderItem.subtotal` is a read-only property computed from
+        `price * quantity`, so no `subtotal` field is passed to the
+        constructor (the model does not define one).
+        """
+        items = []
+        for it in item_rows or []:
+            try:
+                items.append(OrderItem(
+                    product_id=it.get("product_id") or 0,
+                    name=it.get("product_name", ""),
+                    price=float(it.get("unit_price", 0) or 0),
+                    quantity=int(it.get("quantity", 1)),
+                ))
+            except (TypeError, ValueError) as exc:
+                print(f"[SUPABASE REPO] Skipping malformed order item: {exc} | row={it}")
+        return items
 
     # ------------------------------------------------------------------
     # Customers
@@ -351,15 +348,20 @@ class SupabaseDatabase:
         rows = resp.data or []
         customers = []
         for r in rows:
-            order_count, total_spent, last_order = self._customer_order_stats(r.get("id"))
-            customers.append(Customer(
-                name=r.get("full_name", ""),
-                phone=r.get("phone", ""),
-                email=r.get("email", ""),
-                order_count=order_count,
-                total_spent=total_spent,
-                last_order_at=last_order,
-            ))
+            try:
+                order_count, total_spent, last_order = self._customer_order_stats(r.get("id"))
+                customers.append(Customer(
+                    id=r.get("id"),
+                    customer_id=r.get("id"),
+                    name=r.get("full_name", ""),
+                    phone=r.get("phone", ""),
+                    email=r.get("email", ""),
+                    order_count=order_count,
+                    total_spent=total_spent,
+                    last_order_at=last_order,
+                ))
+            except Exception as exc:
+                print(f"[SUPABASE REPO] Skipping malformed customer row: {exc} | row={r}")
         if not customers:
             customers = self._customers_from_orders()
         return customers
@@ -376,7 +378,7 @@ class SupabaseDatabase:
     def _customers_from_orders(self) -> list:
         self._require_admin()
         resp = self.client.table("orders").select(
-            "id, customer_name, customer_phone, customer_email, total_amount, status, created_at"
+            "id, customer_name, customer_phone, total_amount, status, created_at"
         ).order("created_at", desc=True).execute()
         rows = resp.data or []
         grouped = {}
@@ -389,7 +391,7 @@ class SupabaseDatabase:
                 grouped[key] = {
                     "name": r.get("customer_name", ""),
                     "phone": r.get("customer_phone", ""),
-                    "email": r.get("customer_email", ""),
+                    "email": "",
                     "count": 0,
                     "spent": 0.0,
                     "last": r.get("created_at", ""),
@@ -455,6 +457,7 @@ class SupabaseDatabase:
         order = Order(
             id=r["id"],
             order_no=r.get("order_number", ""),
+            customer_id=r.get("customer_id"),
             customer_name=r.get("customer_name", ""),
             customer_phone=r.get("customer_phone", ""),
             customer_email=r.get("customer_email", ""),
@@ -467,7 +470,6 @@ class SupabaseDatabase:
             total=float(r.get("total_amount", 0) or 0),
             status=r.get("status", "pending"),
             created_at=r.get("created_at", ""),
-            customer_id=r.get("customer_id"), # Ensure customer_id is mapped
         )
         order.items = items or []
         return order

@@ -41,6 +41,7 @@ class OrderItem:
 class Order:
     id: int = 0
     order_no: str = ""            # e.g. #VS-1001
+    customer_id: str = None       # UUID from public.customers (optional)
     customer_name: str = ""
     customer_phone: str = ""
     customer_email: str = ""      # optional

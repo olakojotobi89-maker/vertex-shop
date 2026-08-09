@@ -68,7 +68,7 @@ class ProductsView(ctk.CTkFrame):
             child.destroy()
 
         search_text = self.search.get().strip()
-        category = self.category_filter.get()
+        category = self.category_filter_var.get()
         products = db.get_products(search=search_text, category=category)
         
         self.search.set_result(f"{len(products)} product{'s' if len(products) != 1 else ''}")

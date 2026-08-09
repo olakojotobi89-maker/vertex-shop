@@ -134,7 +134,7 @@ def get_supabase_async_client():
         try:
             print("[Supabase Client] Initializing new asynchronous Supabase client.")
             print(f"[Supabase Client] Python version: {sys.version}")
-            from supabase import create_client, Client, ClientOptions
+            from supabase import create_async_client, AsyncClientOptions
         except ImportError as exc:
             raise RuntimeError(
                 "supabase-py is not installed. Run: pip install -r requirements.txt"
@@ -145,8 +145,8 @@ def get_supabase_async_client():
         print(f"[Supabase Client] Using SUPABASE_ANON_KEY (first 5 chars): {key[:5]}... (Async)")
         try:
             _async_http_client = _create_httpx_client(is_async=True)
-            options = ClientOptions(httpx_client=_async_http_client, is_async=True)
-            _async_client = create_client(url, key, options=options)
+            options = AsyncClientOptions(httpx_client=_async_http_client)
+            _async_client = create_async_client(url, key, options=options)
             print("[Supabase Client] Asynchronous Supabase client initialized successfully.")
         except Exception as exc:
             print(f"[Supabase Client] ERROR: Failed to initialise asynchronous Supabase client: {exc}")

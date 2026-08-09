@@ -67,7 +67,7 @@ def validate_phone(value) -> tuple:
     if not s:
         return False, "Phone number is required."
     # Accept digits, spaces, +, - ; between 7 and 15 characters.
-    if not re.fullmatch(r"^[0-9+\s-]{7,15}$", s):
+    if not re.fullmatch(r"^[0-9+\s\-]{7,15}$", s):
         return False, "Enter a valid phone number (e.g. 080 1234 5678)."
     return True, ""
 
