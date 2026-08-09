@@ -7,6 +7,11 @@ to be active so that RLS (app_role=admin) permits them. If a write is
 attempted without an admin session, an error is raised (never silently
 swallowed).
 
+NOTE: Order, order-item, and customer reads are RLS-protected (they require
+an authenticated admin whose JWT carries `app_role=admin`). All such reads
+call `_require_admin()` so the client uses the admin's authenticated session
+and the RLS policies permit the query. No service-role key is used.
+
 Table / column mapping (see supabase_migration.sql):
     - categories : id(uuid), name, created_at
     - products   : id(uuid), name, description, price, image_url, available,
@@ -18,6 +23,10 @@ Table / column mapping (see supabase_migration.sql):
     - order_items: id, order_id(fk), product_id, quantity, product_name,
                    unit_price, subtotal
     - customers  : id(uuid), auth_user_id, full_name, phone, email
+
+Status values in `orders.status` are lowercase and match the
+`orders_status_check` constraint (pending, confirmed, preparing, ready,
+out_for_delivery, delivered, cancelled).
 """
 from datetime import date, datetime
 
@@ -44,11 +53,13 @@ class SupabaseDatabase:
     # Helpers
     # ------------------------------------------------------------------
     def _require_admin(self):
+        print("[SUPABASE REPO] _require_admin() called.")
         if not is_admin_authenticated():
             raise RuntimeError(
                 "Administrator access required. Please sign in with an admin "
-                "account on the Settings page."
+                "account before loading orders and customers."
             )
+        print(f"[SUPABASE REPO] _require_admin() SUCCESS. Admin user: {get_admin_user()}")
 
     def _resolve_category_id(self, category_name: str):
         """Resolve a category name to its id in Supabase."""
@@ -163,20 +174,29 @@ class SupabaseDatabase:
     # Orders
     # ------------------------------------------------------------------
     def _items_for_order(self, order_id) -> list:
+        print(f"[SUPABASE REPO] Fetching order items for order_id: {order_id}")
+        self._require_admin()
         resp = self.client.table("order_items").select(
             "id, product_id, quantity, product_name, unit_price, subtotal"
         ).eq("order_id", order_id).execute()
+        print(f"[SUPABASE REPO] _items_for_order() Supabase response - data: {resp.data}, error: {resp.error}")
         return [
             OrderItem(
                 product_id=it.get("product_id") or 0,
                 name=it.get("product_name", ""),
                 price=float(it.get("unit_price", 0) or 0),
                 quantity=int(it.get("quantity", 1)),
+                subtotal=float(it.get("subtotal", 0) or 0), # Ensure subtotal is mapped
             )
             for it in (resp.data or [])
         ]
 
     def get_orders(self, search: str = "", status: str = "") -> list:
+        print("\n[SUPABASE ORDER FETCH START]")
+        print(f"[SUPABASE REPO] get_orders() called with search='{search}', status='{status}'")
+        self._require_admin()
+        print(f"[SUPABASE REPO] Admin authentication for get_orders: SUCCESS")
+
         query = self.client.table("orders").select("*")
         if search:
             query = query.or_(
@@ -185,15 +205,21 @@ class SupabaseDatabase:
         if status and status != "All":
             query = query.eq("status", status)
         query = query.order("created_at", desc=True)
+        print(f"[SUPABASE REPO] Executing query: {query.url} with params {query.params}")
         resp = query.execute()
+        print(f"[SUPABASE REPO] ORDER QUERY RESULT: data: {resp.data}, error: {resp.error}")
+        print(f"[SUPABASE REPO] DATA COUNT: {len(resp.data or [])}")
+
         rows = resp.data or []
         orders = []
         for r in rows:
             items = self._items_for_order(r["id"])
+            print(f"[SUPABASE REPO] Mapped order {r['order_number']} with {len(items)} items.")
             orders.append(self._order_from_sb(r, items=items))
         return orders
 
     def get_order(self, order_id):
+        self._require_admin()
         resp = self.client.table("orders").select("*").eq("id", order_id).execute()
         rows = resp.data or []
         if not rows:
@@ -241,25 +267,30 @@ class SupabaseDatabase:
         self.client.table("orders").update({"status": status}).eq("id", order_id).execute()
 
     def order_count(self) -> int:
+        self._require_admin()
         resp = self.client.table("orders").select("id").execute()
         return len(resp.data or [])
 
     def orders_by_status(self, status: str) -> int:
+        self._require_admin()
         resp = self.client.table("orders").select("id").eq("status", status).execute()
         return len(resp.data or [])
 
     def orders_today(self) -> int:
+        self._require_admin()
         today = date.today().isoformat()
         resp = self.client.table("orders").select("id").gte("created_at", today).execute()
         return len(resp.data or [])
 
     def sales_today(self) -> float:
+        self._require_admin()
         today = date.today().isoformat()
-        resp = self.client.table("orders").select("total_amount").gte("created_at", today).neq("status", "Cancelled").execute()
+        resp = self.client.table("orders").select("total_amount").gte("created_at", today).neq("status", "cancelled").execute()
         rows = resp.data or []
         return sum(float(r.get("total_amount", 0) or 0) for r in rows)
 
     def recent_orders(self, limit: int = 5) -> list:
+        self._require_admin()
         resp = self.client.table("orders").select("*").order("created_at", desc=True).limit(limit).execute()
         rows = resp.data or []
         orders = []
@@ -272,6 +303,7 @@ class SupabaseDatabase:
     # Customers
     # ------------------------------------------------------------------
     def get_customers(self) -> list:
+        self._require_admin()
         resp = self.client.table("customers").select(
             "id, full_name, phone, email, auth_user_id, created_at"
         ).order("created_at", desc=True).execute()
@@ -292,14 +324,16 @@ class SupabaseDatabase:
         return customers
 
     def _customer_order_stats(self, customer_id):
+        self._require_admin()
         resp = self.client.table("orders").select("total_amount, status, created_at").eq("customer_id", customer_id).execute()
         rows = resp.data or []
         order_count = len(rows)
-        total_spent = sum(float(r.get("total_amount", 0) or 0) for r in rows if r.get("status") != "Cancelled")
+        total_spent = sum(float(r.get("total_amount", 0) or 0) for r in rows if r.get("status") != "cancelled")
         last_order = max((r["created_at"] for r in rows), default="") if rows else ""
         return order_count, total_spent, last_order
 
     def _customers_from_orders(self) -> list:
+        self._require_admin()
         resp = self.client.table("orders").select(
             "id, customer_name, customer_phone, customer_email, total_amount, status, created_at"
         ).order("created_at", desc=True).execute()
@@ -320,7 +354,7 @@ class SupabaseDatabase:
                     "last": r.get("created_at", ""),
                 }
             grouped[key]["count"] += 1
-            if r.get("status") != "Cancelled":
+            if r.get("status") != "cancelled":
                 grouped[key]["spent"] += float(r.get("total_amount", 0) or 0)
             grouped[key]["last"] = max(grouped[key]["last"], r.get("created_at", ""))
         customers = [Customer(
@@ -331,6 +365,7 @@ class SupabaseDatabase:
         return customers
 
     def get_customer_orders(self, phone: str = "", name: str = "") -> list:
+        self._require_admin()
         query = self.client.table("orders").select("*").order("created_at", desc=True)
         if phone:
             query = query.eq("customer_phone", phone)
@@ -351,8 +386,8 @@ class SupabaseDatabase:
         return {
             "total_products": self.product_count(),
             "total_orders": self.order_count(),
-            "pending_orders": self.orders_by_status("Pending"),
-            "completed_orders": self.orders_by_status("Delivered"),
+            "pending_orders": self.orders_by_status("pending"),
+            "completed_orders": self.orders_by_status("delivered"),
             "sales_today": self.sales_today(),
             "orders_today": self.orders_today(),
         }
@@ -389,8 +424,9 @@ class SupabaseDatabase:
             subtotal=float(r.get("subtotal", 0) or 0),
             delivery_fee=float(r.get("delivery_fee", 0) or 0),
             total=float(r.get("total_amount", 0) or 0),
-            status=r.get("status", "Pending"),
+            status=r.get("status", "pending"),
             created_at=r.get("created_at", ""),
+            customer_id=r.get("customer_id"), # Ensure customer_id is mapped
         )
         order.items = items or []
         return order

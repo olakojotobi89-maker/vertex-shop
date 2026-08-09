@@ -44,7 +44,7 @@ class SettingsView(ctk.CTkFrame):
 
         # ----- Active backend detection -----
         is_supabase = bool(getattr(db, "available", False))
-        backend_name = "Supabase (PostgreSQL)" if is_supabase else "Local SQLite (demo mode)"
+        backend_name = "Supabase (PostgreSQL)" if is_supabase else "Supabase (not connected)"
         backend_color = settings.COLORS["primary"] if is_supabase else settings.COLORS["warning"]
 
         # ----- Data & Storage card -----
@@ -62,7 +62,7 @@ class SettingsView(ctk.CTkFrame):
 
         ctk.CTkLabel(data_card, text="Connection", font=font(13),
                      text_color=settings.COLORS["text_muted"]).grid(row=2, column=0, sticky="w", padx=18, pady=4)
-        conn_text = settings.SUPABASE_URL if is_supabase else str(settings.DATABASE_PATH)
+        conn_text = settings.SUPABASE_URL if is_supabase else "Supabase not connected"
         conn_color = settings.COLORS["accent"] if is_supabase else settings.COLORS["text_muted"]
         ctk.CTkLabel(data_card, text=conn_text, font=font(12),
                      text_color=conn_color, anchor="w").grid(row=2, column=1, sticky="w", padx=18, pady=4)
@@ -84,7 +84,7 @@ class SettingsView(ctk.CTkFrame):
         sup_card.grid(row=3, column=0, sticky="nsew", padx=24, pady=(0, 20))
         sup_card.grid_columnconfigure(0, weight=1)
         status_text = ("✔ Connected to Supabase" if is_supabase
-                       else "Supabase not configured — using local SQLite")
+                       else "Supabase not connected — check your .env configuration")
         status_color = settings.COLORS["primary"] if is_supabase else settings.COLORS["warning"]
         ctk.CTkLabel(sup_card, text="Supabase Integration", font=font(16, "bold"),
                      text_color=settings.COLORS["text"]).grid(row=0, column=0, sticky="w", padx=18, pady=(16, 6))

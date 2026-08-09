@@ -58,28 +58,33 @@ STORAGE_BUCKET = "product-images"
 
 # ---------------------------------------------------------------------------
 # Order status workflow (in order of progress)
+#
+# These values MUST match the `orders_status_check` constraint in Supabase
+# exactly. The public web app (js/shop.js) inserts new orders with the
+# lowercase value `pending`, so the dashboard must use the same lowercase
+# strings to filter, display, and update statuses correctly.
 # ---------------------------------------------------------------------------
 ORDER_STATUSES = [
-    "Pending",
-    "Confirmed",
-    "Preparing",
-    "Ready",
-    "Out for Delivery",
-    "Delivered",
-    "Cancelled",
+    "pending",
+    "confirmed",
+    "preparing",
+    "ready",
+    "out_for_delivery",
+    "delivered",
+    "cancelled",
 ]
 
 # Statuses that are considered "active" (not finished/cancelled).
 ACTIVE_STATUSES = [
-    "Pending",
-    "Confirmed",
-    "Preparing",
-    "Ready",
-    "Out for Delivery",
+    "pending",
+    "confirmed",
+    "preparing",
+    "ready",
+    "out_for_delivery",
 ]
 
-COMPLETED_STATUS = "Delivered"
-CANCELLED_STATUS = "Cancelled"
+COMPLETED_STATUS = "delivered"
+CANCELLED_STATUS = "cancelled"
 
 # ---------------------------------------------------------------------------
 # Visual theme
@@ -105,13 +110,13 @@ COLORS = {
 
 # Status -> badge colour mapping for order status labels.
 STATUS_COLORS = {
-    "Pending": "#F59E0B",
-    "Confirmed": "#3B82F6",
-    "Preparing": "#8B5CF6",
-    "Ready": "#14B8A6",
-    "Out for Delivery": "#06B6D4",
-    "Delivered": "#22C55E",
-    "Cancelled": "#EF4444",
+    "pending": "#F59E0B",
+    "confirmed": "#3B82F6",
+    "preparing": "#8B5CF6",
+    "ready": "#14B8A6",
+    "out_for_delivery": "#06B6D4",
+    "delivered": "#22C55E",
+    "cancelled": "#EF4444",
 }
 
 # ---------------------------------------------------------------------------

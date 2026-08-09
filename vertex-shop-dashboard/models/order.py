@@ -52,7 +52,7 @@ class Order:
     subtotal: float = 0.0
     delivery_fee: float = 0.0
     total: float = 0.0
-    status: str = "Pending"
+    status: str = "pending"
     created_at: str = ""          # ISO string
 
     def __post_init__(self):
@@ -112,7 +112,7 @@ class Order:
             subtotal=float(row.get("subtotal", 0) or 0),
             delivery_fee=float(row.get("delivery_fee", 0) or 0),
             total=float(row.get("total", 0) or 0),
-            status=row.get("status", "Pending"),
+            status=row.get("status", "pending"),
             created_at=row.get("created_at", ""),
         )
         order.items = items or []
