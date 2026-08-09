@@ -78,8 +78,8 @@ def get_supabase_client():
     with _lock:
         # Double-check after acquiring lock
         if _sync_client is not None:
-            print("[Supabase Client] Reusing existing Supabase client (after lock).")
-            return _client
+            print("[Supabase Client] Reusing existing synchronous Supabase client (after lock).")
+            return _sync_client
         try:
             print("[Supabase Client] Initializing new Supabase client.")
             print(f"[Supabase Client] Python version: {sys.version}")
@@ -201,8 +201,7 @@ def sign_in_admin(email: str, password: str) -> dict:
     # The Supabase SDK returns a `User` object (attributes, not a dict),
     # so use getattr() instead of .get().
     app_metadata = getattr(user, "app_metadata", None) or {}
-    raw_app_meta = app_metadata.get("raw_app_meta_data") or {}
-    app_role = raw_app_meta.get("app_role") or app_metadata.get("app_role")
+    app_role = app_metadata.get("app_role")
 
     print(f"[Supabase Auth] User authenticated. App role: {app_role}")
     if app_role != "admin":
