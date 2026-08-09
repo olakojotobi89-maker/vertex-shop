@@ -455,6 +455,10 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
     }
   }
 
+  // --- DEBUG LOGS ---
+  console.log("[ORDER DEBUG] Auth user ID:", (await supabaseClient.auth.getUser()).data.user?.id);
+  console.log("[ORDER DEBUG] customerProfileId (fetched from public.customers):", customerProfileId);
+
   // Build order_items payload (product_id, quantity, product_name, unit_price, subtotal).
   const items = Object.entries(Cart.items).map(([id, qty]) => {
     const product = catalog.find((p) => p.id === id);
@@ -473,7 +477,7 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
 
   const orderPayload = {
     order_number: orderRef,
-    customer_id: customerId,
+    customer_id: customerProfileId, // Directly use the fetched customerProfileId
     customer_name: formData.get("customerName"),
     customer_phone: formData.get("customerPhone"),
     order_type: isDelivery ? "delivery" : "pickup",
@@ -485,15 +489,18 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
     total_amount: total,
     status: "Pending",
   };
-  orderPayload.customer_id = customerProfileId; // Assign the fetched customerProfileId
+  console.log("[ORDER DEBUG] Final orderPayload before INSERT:", orderPayload);
+
   if (supabaseClient) {
     try {
       // Insert the order header first.
+      console.log("[ORDER DEBUG] Attempting to insert order...");
       const { data: orderRow, error: orderError } = await supabaseClient
         .from("orders")
         .insert([orderPayload])
         .select()
         .single();
+      console.log("[ORDER DEBUG] Order INSERT result:", { orderRow, orderError });
       if (orderError) throw orderError;
 
       orderRef = orderRow.order_number || orderRef;
@@ -503,6 +510,7 @@ document.getElementById("checkout-form").addEventListener("submit", async (e) =>
       const { error: itemsError } = await supabaseClient
         .from("order_items")
         .insert(itemsPayload);
+      console.log("[ORDER DEBUG] Order Items INSERT result:", { itemsError });
       if (itemsError) throw itemsError;
     } catch (err) {
       const msg = err.message || "Something went wrong placing your order.";
