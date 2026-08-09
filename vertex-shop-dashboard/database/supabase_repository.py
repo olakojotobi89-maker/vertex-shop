@@ -192,13 +192,13 @@ class SupabaseDatabase:
         ]
 
     def get_orders(self, search: str = "", status: str = "") -> list:
-        print("\n[SUPABASE ORDER FETCH START]")
+        print("\n[SUPABASE REPO] get_orders() - START")
         print(f"[SUPABASE REPO] get_orders() called with search='{search}', status='{status}'")
         self._require_admin()
         print(f"[SUPABASE REPO] Admin authentication for get_orders: SUCCESS")
 
         query = self.client.table("orders").select("*")
-        if search:
+        if search: # Search by order_number, customer_name, customer_phone
             query = query.or_(
                 f"order_number.ilike.%{search}%,customer_name.ilike.%{search}%,customer_phone.ilike.%{search}%"
             )
@@ -211,10 +211,24 @@ class SupabaseDatabase:
         print(f"[SUPABASE REPO] DATA COUNT: {len(resp.data or [])}")
 
         rows = resp.data or []
+        order_ids = [r["id"] for r in rows]
+
+        # Fetch all order items for these orders in a single query
+        items_map = {}
+        if order_ids:
+            items_resp = self.client.table("order_items").select(
+                "order_id, id, product_id, quantity, product_name, unit_price, subtotal"
+            ).in_("order_id", order_ids).execute()
+            for item_row in (items_resp.data or []):
+                order_id = item_row["order_id"]
+                if order_id not in items_map:
+                    items_map[order_id] = []
+                items_map[order_id].append(item_row)
+
         orders = []
         for r in rows:
-            items = self._items_for_order(r["id"])
-            print(f"[SUPABASE REPO] Mapped order {r['order_number']} with {len(items)} items.")
+            items = self._items_for_order_from_map(items_map.get(r["id"], []))
+            print(f"[SUPABASE REPO] Mapped order {r['order_number']} with {len(items)} items (batch fetched).")
             orders.append(self._order_from_sb(r, items=items))
         return orders
 
@@ -294,10 +308,37 @@ class SupabaseDatabase:
         resp = self.client.table("orders").select("*").order("created_at", desc=True).limit(limit).execute()
         rows = resp.data or []
         orders = []
+        order_ids = [r["id"] for r in rows]
+
+        # Fetch all order items for these orders in a single query
+        items_map = {}
+        if order_ids:
+            items_resp = self.client.table("order_items").select(
+                "order_id, id, product_id, quantity, product_name, unit_price, subtotal"
+            ).in_("order_id", order_ids).execute()
+            for item_row in (items_resp.data or []):
+                order_id = item_row["order_id"]
+                if order_id not in items_map:
+                    items_map[order_id] = []
+                items_map[order_id].append(item_row)
+
         for r in rows:
-            items = self._items_for_order(r["id"])
+            items = self._items_for_order_from_map(items_map.get(r["id"], []))
             orders.append(self._order_from_sb(r, items=items))
         return orders
+
+    def _items_for_order_from_map(self, item_rows: list) -> list:
+        """Helper to map pre-fetched item rows to OrderItem objects."""
+        return [
+            OrderItem(
+                product_id=it.get("product_id") or 0,
+                name=it.get("product_name", ""),
+                price=float(it.get("unit_price", 0) or 0),
+                quantity=int(it.get("quantity", 1)),
+                subtotal=float(it.get("subtotal", 0) or 0),
+            )
+            for it in item_rows
+        ]
 
     # ------------------------------------------------------------------
     # Customers

@@ -1,6 +1,3 @@
-customtkinter>=6.0.0
-pillow>=10.0.0
-
-# --- Supabase backend (required — the dashboard no longer uses SQLite) ---
-supabase>=2.4.0
-python-dotenv>=1.0.0
+customtkinter
+pillow
+playsound>=1.3.0

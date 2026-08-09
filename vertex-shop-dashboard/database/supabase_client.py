@@ -171,6 +171,11 @@ def get_admin_user() -> dict:
     return _admin_user
 
 
+def get_admin_access_token() -> str | None:
+    """Return the current admin session's access token, or None."""
+    return _admin_session.access_token if _admin_session else None
+
+
 def sign_in_admin(email: str, password: str) -> dict:
     """
     Authenticate an administrator via Supabase Auth.
@@ -201,8 +206,7 @@ def sign_in_admin(email: str, password: str) -> dict:
     # The Supabase SDK returns a `User` object (attributes, not a dict),
     # so use getattr() instead of .get().
     app_metadata = getattr(user, "app_metadata", None) or {}
-    app_role = app_metadata.get("app_role")
-
+    app_role = app_metadata.get("app_role") # Simplified app_role resolution
     print(f"[Supabase Auth] User authenticated. App role: {app_role}")
     if app_role != "admin":
         sign_out_admin()
