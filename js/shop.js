@@ -331,13 +331,19 @@ cartOverlay.addEventListener("click", closeCart);
 /* ============================================================
    SEARCH
    ============================================================ */
-document.getElementById("search-toggle").addEventListener("click", () => {
-  const bar = document.getElementById("search-bar");
-  bar.classList.toggle("hidden");
-  if (!bar.classList.contains("hidden")) {
-    document.getElementById("product-search").focus();
-  }
-});
+const searchToggleBtn = document.getElementById("search-toggle");
+if (searchToggleBtn) {
+  searchToggleBtn.addEventListener("click", () => {
+    const bar = document.getElementById("search-bar");
+    if (bar) {
+      bar.classList.toggle("hidden");
+      if (!bar.classList.contains("hidden")) {
+        document.getElementById("product-search")?.focus();
+      }
+    }
+  });
+}
+
 document.getElementById("product-search").addEventListener("input", (e) => {
   searchTerm = e.target.value;
   renderProducts();
