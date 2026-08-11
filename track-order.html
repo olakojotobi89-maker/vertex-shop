@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Track Your Order — Vertex Shop</title>
+<meta name="description" content="Check the status of your recent orders from Vertex Shop.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+</head>
+<body class="shop-page-body">
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header class="shop-header">
+  <div class="container shop-header-inner">
+    <a href="shop.html" class="shop-logo" aria-label="Vertex Shop home">
+      <img src="image/logo.png" alt="Vertex Shop" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+      <span class="shop-logo-fallback" style="display:none;">VS</span>
+      <span class="shop-logo-word">Vertex Shop</span>
+    </a>
+
+    <div class="shop-header-actions">
+      <a href="track-order.html" class="icon-btn" aria-label="Track Order">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+      </a>
+      <a href="login.html" class="icon-btn" aria-label="Account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================
+     ORDER TRACKING SECTION
+     ============================================================ -->
+<main class="container" style="padding-top: 2rem; padding-bottom: 4rem; min-height: 60vh;">
+  <div class="section-heading" style="text-align: left; margin-bottom: 1.5rem;">
+    <h1>Your Orders</h1>
+    <p class="eyebrow" style="margin: 0;">Check the status of your recent purchases.</p>
+  </div>
+
+  <!-- This container will be populated by js/tracking.js -->
+  <div id="order-tracking-container">
+    <!-- Loading state -->
+    <div class="empty-state">
+      <div class="loader"></div>
+      <p>Loading your orders...</p>
+    </div>
+  </div>
+</main>
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer class="shop-footer">
+  <div class="container">
+    <div class="shop-logo">
+      <img src="image/logo.png" alt="Vertex Shop" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+      <span class="shop-logo-fallback" style="display:none;">VS</span>
+      <span class="shop-logo-word" style="display:inline; color: var(--text-on-ink);">Vertex Shop</span>
+    </div>
+    <p>Freshly prepared meals, pastries &amp; drinks — delivered across the city.</p>
+    <p style="margin-top: 12px; font-size: 0.78rem;">&copy; 2026 Vertex Shop. All rights reserved.</p>
+  </div>
+</footer>
+
+<!-- ============================================================
+     MOBILE BOTTOM NAV
+     ============================================================ -->
+<nav class="mobile-nav" aria-label="Primary">
+  <a href="shop.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    Home
+  </a>
+  <a href="track-order.html" class="is-active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+    Track
+  </a>
+  <a href="login.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    Account
+  </a>
+</nav>
+
+<script src="js/auth.js"></script>
+<script src="js/tracking.js"></script>
+
+</body>
+</html>

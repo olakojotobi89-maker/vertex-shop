@@ -65,8 +65,8 @@ const VertexAuth = (() => {
     });
 
     if (error) {
-      console.error("Supabase signUp error:", error);
-      throw new Error(error.message || "Unable to create account.");
+      console.error("Supabase signUp error:", { message: error.message, status: error.status });
+      throw new Error(error.message || `Unable to create account (status: ${error.status}).`);
     }
 
     if (!data.user) {
@@ -174,9 +174,9 @@ if (registerForm) {
 
     try {
       await VertexAuth.registerUser({
-        fullName: formData.get("fullName").trim(),
-        email: formData.get("email").trim(),
-        phone: formData.get("phone").trim(),
+        fullName: formData.get("fullName"),
+        email: formData.get("email"),
+        phone: formData.get("phone"),
         password: formData.get("password"),
       });
       // If email confirmation is enabled, redirect to a "check your email"
