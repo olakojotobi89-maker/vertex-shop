@@ -132,113 +132,111 @@ const VertexAuth = (() => {
   return { getCurrentUser, saveSession, clearSession, registerUser, loginUser, logout, getSessionUser };
 })();
 
-/* ---------- Registration form ---------- */
-const registerForm = document.getElementById("register-form");
-if (registerForm) {
-  const passwordField = document.getElementById("password");
-  const confirmField = document.getElementById("confirm-password");
-  const matchHint = document.getElementById("password-match-hint");
-  const errorBox = document.getElementById("register-error");
+document.addEventListener("DOMContentLoaded", () => {
+  /* ---------- Registration form ---------- */
+  const registerForm = document.getElementById("register-form");
+  if (registerForm) {
+    const passwordField = document.getElementById("password");
+    const confirmField = document.getElementById("confirm-password");
+    const matchHint = document.getElementById("password-match-hint");
+    const errorBox = document.getElementById("register-error");
 
-  function checkPasswordsMatch() {
-    if (!confirmField.value) {
-      matchHint.textContent = "";
-      return true;
+    function checkPasswordsMatch() {
+      if (!confirmField.value) {
+        matchHint.textContent = "";
+        return true;
+      }
+      const matches = passwordField.value === confirmField.value;
+      matchHint.textContent = matches ? "Passwords match." : "Passwords do not match.";
+      matchHint.style.color = matches ? "var(--brand)" : "var(--danger)";
+      return matches;
     }
-    const matches = passwordField.value === confirmField.value;
-    matchHint.textContent = matches ? "Passwords match." : "Passwords do not match.";
-    matchHint.style.color = matches ? "var(--brand)" : "var(--danger)";
-    return matches;
+
+    confirmField.addEventListener("input", checkPasswordsMatch);
+    passwordField.addEventListener("input", checkPasswordsMatch);
+
+    registerForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorBox.style.display = "none";
+
+      if (!registerForm.checkValidity()) {
+        registerForm.reportValidity();
+        return;
+      }
+
+      if (!checkPasswordsMatch()) {
+        return;
+      }
+
+      const formData = new FormData(registerForm);
+      const submitBtn = registerForm.querySelector("button[type='submit']");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Creating account…";
+
+      try {
+        await VertexAuth.registerUser({
+          fullName: formData.get("fullName"),
+          email: formData.get("email"),
+          phone: formData.get("phone"),
+          password: formData.get("password"),
+        });
+        window.location.href = "shop.html";
+      } catch (err) {
+        errorBox.textContent = err.message || "Something went wrong. Please try again.";
+        errorBox.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Create Account";
+      }
+    });
   }
 
-  confirmField.addEventListener("input", checkPasswordsMatch);
-  passwordField.addEventListener("input", checkPasswordsMatch);
+  /* ---------- Login form ---------- */
+  const loginForm = document.getElementById("login-form");
+  if (loginForm) {
+    const errorBox = document.getElementById("login-error");
+    const forgotLink = document.getElementById("forgot-password-link");
 
-  registerForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    errorBox.style.display = "none";
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorBox.style.display = "none";
 
-    if (!registerForm.checkValidity()) {
-      registerForm.reportValidity();
-      return;
-    }
+      if (!loginForm.checkValidity()) {
+        loginForm.reportValidity();
+        return;
+      }
 
-    if (!checkPasswordsMatch()) {
-      return;
-    }
+      const formData = new FormData(loginForm);
+      const submitBtn = loginForm.querySelector("button[type='submit']");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Logging in…";
 
-    const formData = new FormData(registerForm);
-    const submitBtn = registerForm.querySelector("button[type='submit']");
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Creating account…";
+      try {
+        await VertexAuth.loginUser({
+          identifier: formData.get("identifier").trim(),
+          password: formData.get("password"),
+        });
+        window.location.href = "shop.html";
+      } catch (err) {
+        errorBox.textContent = err.message || "Something went wrong. Please try again.";
+        errorBox.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Log In";
+      }
+    });
 
-    try {
-      await VertexAuth.registerUser({
-        fullName: formData.get("fullName"),
-        email: formData.get("email"),
-        phone: formData.get("phone"),
-        password: formData.get("password"),
-      });
-      // If email confirmation is enabled, redirect to a "check your email"
-      // notice. Otherwise go straight to the shop. For simplicity we go to
-      // shop.html; the app will reflect the auth state. Adjust if you enable
-      // email confirmation.
-      window.location.href = "shop.html";
-    } catch (err) {
-      errorBox.textContent = err.message || "Something went wrong. Please try again.";
-      errorBox.style.display = "block";
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Create Account";
-    }
-  });
-}
+    forgotLink?.addEventListener("click", (event) => {
+      event.preventDefault();
+      alert("Password reset isn't wired up yet.");
+    });
+  }
 
-/* ---------- Login form ---------- */
-const loginForm = document.getElementById("login-form");
-if (loginForm) {
-  const errorBox = document.getElementById("login-error");
-  const forgotLink = document.getElementById("forgot-password-link");
-
-  loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    errorBox.style.display = "none";
-
-    if (!loginForm.checkValidity()) {
-      loginForm.reportValidity();
-      return;
-    }
-
-    const formData = new FormData(loginForm);
-    const submitBtn = loginForm.querySelector("button[type='submit']");
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Logging in…";
-
-    try {
-      await VertexAuth.loginUser({
-        identifier: formData.get("identifier").trim(),
-        password: formData.get("password"),
-      });
-      window.location.href = "shop.html";
-    } catch (err) {
-      errorBox.textContent = err.message || "Something went wrong. Please try again.";
-      errorBox.style.display = "block";
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Log In";
-    }
-  });
-
-  forgotLink?.addEventListener("click", (event) => {
-    event.preventDefault();
-    alert("Password reset isn't wired up yet.");
-  });
-}
-
-/* ---------- Logout button (if present on the page) ---------- */
-const logoutBtn = document.getElementById("logout-btn");
-if (logoutBtn) {
-  logoutBtn.addEventListener("click", async (event) => {
-    event.preventDefault();
-    await VertexAuth.logout();
-    window.location.href = "login.html";
-  });
-}
+  /* ---------- Logout button (if present on the page) ---------- */
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      await VertexAuth.logout();
+      window.location.href = "login.html";
+    });
+  }
+});
